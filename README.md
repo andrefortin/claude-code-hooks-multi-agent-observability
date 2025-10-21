@@ -4,13 +4,13 @@ Real-time monitoring and visualization for Claude Code agents through comprehens
 
 ## 🎯 Overview
 
-This system provides complete observability into Claude Code agent behavior by capturing, storing, and visualizing Claude Code [Hook events](https://docs.anthropic.com/en/docs/claude-code/hooks) in real-time. It enables monitoring of multiple concurrent agents with session tracking, event filtering, and live updates. 
+This system provides complete observability into Claude Code agent behavior by capturing, storing, and visualizing Claude Code [Hook events](https://docs.anthropic.com/en/docs/claude-code/hooks) in real-time. It enables monitoring of multiple concurrent agents with session tracking, event filtering, and live updates.
 
-<img src="images/app.png" alt="Multi-Agent Observability Dashboard" style="max-width: 800px; width: 100%;">
+![Multi-Agent Observability Dashboard](images/app.png)
 
 ## 🏗️ Architecture
 
-```
+```text
 Claude Agents → Hook Scripts → HTTP POST → Bun Server → SQLite → WebSocket → Vue Client
 ```
 
@@ -34,63 +34,71 @@ To setup observability in your repo,we need to copy the .claude directory to you
 To integrate the observability hooks into your projects:
 
 1. **Copy the entire `.claude` directory to your project root:**
+
    ```bash
    cp -R .claude /path/to/your/project/
    ```
 
 2. **Update the `settings.json` configuration:**
-   
+
    Open `.claude/settings.json` in your project and modify the `source-app` parameter to identify your project:
-   
+
    ```json
    {
      "hooks": {
-       "PreToolUse": [{
-         "matcher": "",
-         "hooks": [
-           {
-             "type": "command",
-             "command": "uv run .claude/hooks/pre_tool_use.py"
-           },
-           {
-             "type": "command",
-             "command": "uv run .claude/hooks/send_event.py --source-app YOUR_PROJECT_NAME --event-type PreToolUse --summarize"
-           }
-         ]
-       }],
-       "PostToolUse": [{
-         "matcher": "",
-         "hooks": [
-           {
-             "type": "command",
-             "command": "uv run .claude/hooks/post_tool_use.py"
-           },
-           {
-             "type": "command",
-             "command": "uv run .claude/hooks/send_event.py --source-app YOUR_PROJECT_NAME --event-type PostToolUse --summarize"
-           }
-         ]
-       }],
-       "UserPromptSubmit": [{
-         "hooks": [
-           {
-             "type": "command",
-             "command": "uv run .claude/hooks/user_prompt_submit.py --log-only"
-           },
-           {
-             "type": "command",
-             "command": "uv run .claude/hooks/send_event.py --source-app YOUR_PROJECT_NAME --event-type UserPromptSubmit --summarize"
-           }
-         ]
-       }]
+       "PreToolUse": [
+         {
+           "matcher": "",
+           "hooks": [
+             {
+               "type": "command",
+               "command": "uv run .claude/hooks/pre_tool_use.py"
+             },
+             {
+               "type": "command",
+               "command": "uv run .claude/hooks/send_event.py --source-app YOUR_PROJECT_NAME --event-type PreToolUse --summarize"
+             }
+           ]
+         }
+       ],
+       "PostToolUse": [
+         {
+           "matcher": "",
+           "hooks": [
+             {
+               "type": "command",
+               "command": "uv run .claude/hooks/post_tool_use.py"
+             },
+             {
+               "type": "command",
+               "command": "uv run .claude/hooks/send_event.py --source-app YOUR_PROJECT_NAME --event-type PostToolUse --summarize"
+             }
+           ]
+         }
+       ],
+       "UserPromptSubmit": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "uv run .claude/hooks/user_prompt_submit.py --log-only"
+             },
+             {
+               "type": "command",
+               "command": "uv run .claude/hooks/send_event.py --source-app YOUR_PROJECT_NAME --event-type UserPromptSubmit --summarize"
+             }
+           ]
+         }
+       ]
        // ... (similar patterns for Notification, Stop, SubagentStop, PreCompact, SessionStart, SessionEnd)
      }
    }
    ```
-   
+
    Replace `YOUR_PROJECT_NAME` with a unique identifier for your project (e.g., `my-api-server`, `react-app`, etc.).
 
 3. **Ensure the observability server is running:**
+
    ```bash
    # From the observability project directory (this codebase)
    ./scripts/start-system.sh
@@ -119,10 +127,10 @@ cp -R .claude <directory of your codebase you want to emit events from>
 
 ## 📁 Project Structure
 
-```
+```text
 claude-code-hooks-multi-agent-observability/
 │
-├── apps/                    # Application components
+├── apps/                   # Application components
 │   ├── server/             # Bun TypeScript server
 │   │   ├── src/
 │   │   │   ├── index.ts    # Main server with HTTP/WebSocket endpoints
@@ -181,6 +189,7 @@ claude-code-hooks-multi-agent-observability/
 The hook system intercepts Claude Code lifecycle events:
 
 - **`send_event.py`**: Core script that sends event data to the observability server
+
   - Supports `--add-chat` flag for including conversation history
   - Validates server connectivity before sending
   - Handles all event types with proper error handling
@@ -217,12 +226,14 @@ Bun-powered TypeScript server with real-time capabilities:
 Vue 3 application with real-time visualization:
 
 - **Visual Design**:
+
   - Dual-color system: App colors (left border) + Session colors (second border)
   - Gradient indicators for visual distinction
   - Dark/light theme support
   - Responsive layout with smooth animations
 
 - **Features**:
+
   - Real-time WebSocket updates
   - Multi-criteria filtering (app, session, event type)
   - Live pulse chart with session-colored bars and event type indicators
@@ -254,19 +265,20 @@ Vue 3 application with real-time visualization:
 
 | Event Type       | Emoji | Purpose                | Color Coding  | Special Display                       |
 | ---------------- | ----- | ---------------------- | ------------- | ------------------------------------- |
-| PreToolUse       | 🔧     | Before tool execution  | Session-based | Tool name & details                   |
-| PostToolUse      | ✅     | After tool completion  | Session-based | Tool name & results                   |
-| Notification     | 🔔     | User interactions      | Session-based | Notification message                  |
-| Stop             | 🛑     | Response completion    | Session-based | Summary & chat transcript             |
-| SubagentStop     | 👥     | Subagent finished      | Session-based | Subagent details                      |
-| PreCompact       | 📦     | Context compaction     | Session-based | Compaction details                    |
-| UserPromptSubmit | 💬     | User prompt submission | Session-based | Prompt: _"user message"_ (italic)     |
-| SessionStart     | 🚀     | Session started        | Session-based | Session source (startup/resume/clear) |
-| SessionEnd       | 🏁     | Session ended          | Session-based | End reason (clear/logout/exit/other)  |
+| PreToolUse       | 🔧    | Before tool execution  | Session-based | Tool name & details                   |
+| PostToolUse      | ✅    | After tool completion  | Session-based | Tool name & results                   |
+| Notification     | 🔔    | User interactions      | Session-based | Notification message                  |
+| Stop             | 🛑    | Response completion    | Session-based | Summary & chat transcript             |
+| SubagentStop     | 👥    | Subagent finished      | Session-based | Subagent details                      |
+| PreCompact       | 📦    | Context compaction     | Session-based | Compaction details                    |
+| UserPromptSubmit | 💬    | User prompt submission | Session-based | Prompt: _"user message"_ (italic)     |
+| SessionStart     | 🚀    | Session started        | Session-based | Session source (startup/resume/clear) |
+| SessionEnd       | 🏁    | Session ended          | Session-based | End reason (clear/logout/exit/other)  |
 
 ### UserPromptSubmit Event (v1.0.54+)
 
 The `UserPromptSubmit` hook captures every user prompt before Claude processes it. In the UI:
+
 - Displays as `Prompt: "user's message"` in italic text
 - Shows the actual prompt content inline (truncated to 100 chars)
 - Summary appears on the right side when AI summarization is enabled
@@ -277,21 +289,27 @@ The `UserPromptSubmit` hook captures every user prompt before Claude processes i
 ### For New Projects
 
 1. Copy the event sender:
+
    ```bash
    cp .claude/hooks/send_event.py YOUR_PROJECT/.claude/hooks/
    ```
 
 2. Add to your `.claude/settings.json`:
+
    ```json
    {
      "hooks": {
-       "PreToolUse": [{
-         "matcher": ".*",
-         "hooks": [{
-           "type": "command",
-           "command": "uv run .claude/hooks/send_event.py --source-app YOUR_APP --event-type PreToolUse"
-         }]
-       }]
+       "PreToolUse": [
+         {
+           "matcher": ".*",
+           "hooks": [
+             {
+               "type": "command",
+               "command": "uv run .claude/hooks/send_event.py --source-app YOUR_APP --event-type PreToolUse"
+             }
+           ]
+         }
+       ]
      }
    }
    ```
@@ -299,13 +317,14 @@ The `UserPromptSubmit` hook captures every user prompt before Claude processes i
 ### For This Project
 
 Already integrated! Hooks run both validation and observability:
+
 ```json
 {
   "type": "command",
   "command": "uv run .claude/hooks/pre_tool_use.py"
 },
 {
-  "type": "command", 
+  "type": "command",
   "command": "uv run .claude/hooks/send_event.py --source-app cc-hooks-observability --event-type PreToolUse"
 }
 ```
@@ -334,6 +353,7 @@ curl -X POST http://localhost:4000/events \
 Copy `.env.sample` to `.env` in the project root and fill in your API keys:
 
 **Application Root** (`.env` file):
+
 - `ANTHROPIC_API_KEY` – Anthropic Claude API key (required)
 - `ENGINEER_NAME` – Your name (for logging/identification)
 - `GEMINI_API_KEY` – Google Gemini API key (optional)
@@ -341,6 +361,7 @@ Copy `.env.sample` to `.env` in the project root and fill in your API keys:
 - `ELEVEN_API_KEY` – ElevenLabs API key (optional)
 
 **Client** (`.env` file in `apps/client/.env`):
+
 - `VITE_MAX_EVENTS_TO_DISPLAY=100` – Maximum events to show (removes oldest when exceeded)
 
 ### Server Ports
@@ -376,6 +397,7 @@ If your hook scripts aren't executing properly, it might be due to relative path
 ```
 
 This command will:
+
 - Find all relative paths in your hook command scripts
 - Convert them to absolute paths based on your current working directory
 - Create a backup of your original settings.json
@@ -384,9 +406,9 @@ This command will:
 This ensures your hooks work correctly regardless of where Claude Code is executed from.
 
 ## Master AI **Agentic Coding**
+
 > And prepare for the future of software engineering
 
 Learn tactical agentic coding patterns with [Tactical Agentic Coding](https://agenticengineer.com/tactical-agentic-coding?y=cchobvwh45)
 
 Follow the [IndyDevDan YouTube channel](https://www.youtube.com/@indydevdan) to improve your agentic coding advantage.
-

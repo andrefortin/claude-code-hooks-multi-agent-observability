@@ -184,6 +184,7 @@ if __name__ == "__main__":
 ### Pending Request Display
 
 When a HITL request is active, it appears at the top of the event with:
+
 - 🟨 **Yellow highlight** with pulsing animation
 - **Question text** prominently displayed
 - **Response input** based on type:
@@ -194,6 +195,7 @@ When a HITL request is active, it appears at the top of the event with:
 ### After Response
 
 Once responded, the request shows:
+
 - ✅ **Green indicator** with timestamp
 - **"Show Details"** button to view the response
 - Full response preserved in event history
@@ -207,6 +209,7 @@ Once responded, the request shows:
 Ask a free-form question and wait for text response.
 
 **Parameters:**
+
 - `question` (str): The question to ask
 - `session_data` (dict): Session info with `source_app` and `session_id`
 - `timeout` (int): Seconds to wait for response (default: 300)
@@ -220,6 +223,7 @@ Ask a free-form question and wait for text response.
 Request yes/no permission from user.
 
 **Parameters:**
+
 - `question` (str): Permission request message
 - `session_data` (dict): Session info
 - `timeout` (int): Seconds to wait (default: 300)
@@ -233,6 +237,7 @@ Request yes/no permission from user.
 Present multiple choice options to user.
 
 **Parameters:**
+
 - `question` (str): The question/prompt
 - `choices` (list[str]): List of options to choose from
 - `session_data` (dict): Session info
@@ -276,7 +281,7 @@ if response:
 interface HumanInTheLoop {
   question: string;
   responseWebSocketUrl: string;
-  type: 'question' | 'permission' | 'choice';
+  type: "question" | "permission" | "choice";
   choices?: string[];
   timeout?: number;
   requiresResponse?: boolean;
@@ -292,7 +297,7 @@ interface HumanInTheLoopResponse {
 }
 
 interface HumanInTheLoopStatus {
-  status: 'pending' | 'responded' | 'timeout' | 'error';
+  status: "pending" | "responded" | "timeout" | "error";
   respondedAt?: number;
   response?: HumanInTheLoopResponse;
 }
@@ -348,6 +353,7 @@ uv run .claude/hooks/examples/hitl_example.py
 ```
 
 This will demonstrate:
+
 1. Question with free-form text response
 2. Permission request with approve/deny
 3. Multiple choice selection
@@ -359,6 +365,7 @@ This will demonstrate:
 **Problem**: Agent can't establish WebSocket server for receiving responses.
 
 **Solutions**:
+
 - Ensure `websockets` package is installed: `uv pip install websockets`
 - Check firewall settings allow local WebSocket connections
 - Verify no other service is using the assigned port
@@ -368,6 +375,7 @@ This will demonstrate:
 **Problem**: Agent waits but doesn't receive response.
 
 **Solutions**:
+
 - Verify observability server is running (`http://localhost:4000`)
 - Check dashboard is open (`http://localhost:5173`)
 - Increase timeout value if response takes longer
@@ -378,6 +386,7 @@ This will demonstrate:
 **Problem**: HITL request doesn't show in the UI.
 
 **Solutions**:
+
 - Verify event was sent to server (check server logs)
 - Refresh the dashboard
 - Check WebSocket connection is active (check browser dev tools)
@@ -401,6 +410,7 @@ This will demonstrate:
 ## Future Enhancements
 
 Planned improvements:
+
 - 📸 Rich media questions (images, code snippets, diffs)
 - 🔁 Multi-step conversational workflows
 - 📊 Response history and analytics
