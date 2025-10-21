@@ -234,27 +234,39 @@ const server = Bun.serve({
   websocket: {
     open(ws: ServerWebSocket<unknown>) {
       connectedClients.add(ws);
-      // Send initial recent events
-      (async () => {
-        try {
-          const events = await getRecentEvents();
-          ws.send(JSON.stringify({ type: 'initial', data: events }));
-        } catch (err) {
-          console.error('Failed to send initial events:', err);
-        }
-      })();
+      // Don't send initial here; wait for subscribe
     },
+
     message(ws: ServerWebSocket<unknown>, message: string | Buffer) {
       if (typeof message !== 'string') return;
 
       try {
         const data = JSON.parse(message.toString());
         if (data.type === 'subscribe') {
-          // Handle subscription, for now just acknowledge
+          const limit = data.limit || 1000;
+          // Send initial events with client-specified limit
+          (async () => {
+            try {
+              const events = await getRecentEvents(Math.min(limit, 5000)); // Cap at 5000 for safety
+              ws.send(JSON.stringify({ type: 'initial', data: events }));
+              console.log(`Sent ${events.length} initial events for limit ${limit}`);
+            } catch (err) {
+              console.error('Failed to send initial events:', err);
+              ws.send(JSON.stringify({ type: 'error', message: 'Failed to load events' }));
+            }
+          })();
           ws.send(JSON.stringify({ type: 'subscribed' }));
-          // Optionally send current events again, but already sent on open
         }
       } catch (error) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
+      }
+    },
+    message(ws: ServerWebSocket<unknown>, message: string | Buffer) {
+      if (typeof message !== 'string') return;
+
+      try {
+        const data = JSON.parse(message.toString());
+          } catch (error) {
         ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
       }
     },
