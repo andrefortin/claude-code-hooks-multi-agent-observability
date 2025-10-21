@@ -16,6 +16,7 @@ OUTPUT_DIRECTORY: `ai_docs/<RUN_NAME>/`
 AGENT_NAME: `fetch-docs-<RUN_NAME>`
 
 USER_QUESTIONS:
+
 1. **Subagents**: "What are the three different priority levels for subagents (project-level, user-level, CLI-defined), and how does the priority system determine which subagent is used when there are naming conflicts? Explain with a specific example scenario."
 
 2. **Plugins**: "Explain the complete directory structure required for a plugin that includes commands, agents, skills, hooks, and MCP servers. What is the purpose of the .claude-plugin directory and what files must it contain?"
@@ -55,16 +56,20 @@ Save to `OUTPUT_DIRECTORY/answers.md`:
 # AI Documentation Q&A - <RUN_NAME>
 
 ## Fetch Results
+
 - ✅ Success: <url> → <file-path>
 - ✅ Success: <url> → <file-path>
 - ❌ Failure: <url> → <error>
 
 ## Question 1: Subagents Priority System
+
 <Your detailed answer here>
 
 ## Question 2: Plugin Directory Structure
+
 <Your detailed answer here>
 
 ## Question 3: Skills vs Subagents
+
 <Your detailed answer here>
 ```

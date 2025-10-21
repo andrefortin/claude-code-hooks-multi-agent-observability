@@ -31,7 +31,7 @@ PLAN_OUTPUT_DIRECTORY: `specs/`
 - Consider edge cases, error handling, and scalability concerns
 - Structure the document with clear sections and proper markdown formatting
 - IMPORTANT: Do not use any subagents to do this. Run your own code to accomplish this task.
-- IMPORTANT: Remember you are planning, not building. You are not writing any code. 
+- IMPORTANT: Remember you are planning, not building. You are not writing any code.
 
 ## Workflow
 
@@ -45,7 +45,7 @@ PLAN_OUTPUT_DIRECTORY: `specs/`
 
 After creating and saving the implementation plan, provide a concise report with the following format:
 
-```
+```text
 ✅ Implementation Plan Created
 
 File: PLAN_OUTPUT_DIRECTORY/<filename>.md
