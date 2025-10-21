@@ -33,35 +33,38 @@
             {{ events.length }}
           </span>
 
-          <!-- TTS Provider Selector -->
-          <div class="flex items-center bg-white/20 rounded-lg border border-white/30 px-2 py-1 mobile:px-1 mobile:py-0.5">
-            <span class="text-xs mobile:text-xs text-white font-medium mr-2 mobile:mr-1">TTS:</span>
-            <select
-              v-model="provider"
-              @change="setProvider(provider)"
-              class="bg-transparent border-0 text-white text-xs mobile:text-xs font-medium focus:outline-none focus:ring-2 focus:ring-white/50 rounded"
-            >
-              <option value="openai" class="bg-gray-800 text-white">OpenAI</option>
-              <option value="elevenlabs" class="bg-gray-800 text-white">ElevenLabs</option>
-              <option value="pyttsx3" class="bg-gray-800 text-white">Pyttsx3</option>
-            </select>
-          </div>
+          <!-- Stacked Max Events and TTS Selectors -->
+          <div class="flex flex-col space-y-1">
+            <!-- Max Events Selector -->
+            <div class="flex items-center bg-white/20 rounded-lg border border-white/30 px-2 py-1 mobile:px-1 mobile:py-0.5">
+              <span class="text-xs mobile:text-xs text-white font-medium mr-2 mobile:mr-1">Max Events:</span>
+              <select
+                v-model.number="maxEvents"
+                @change="setMaxEvents(maxEvents)"
+                class="bg-transparent border-0 text-white text-xs mobile:text-xs font-medium focus:outline-none focus:ring-2 focus:ring-white/50 rounded"
+                :title="`Showing last ${maxEvents} events`"
+              >
+                <option value="100" class="bg-gray-800 text-white">100</option>
+                <option value="500" class="bg-gray-800 text-white">500</option>
+                <option value="1000" class="bg-gray-800 text-white">1K</option>
+                <option value="2000" class="bg-gray-800 text-white">2K</option>
+                <option value="5000" class="bg-gray-800 text-white">5K</option>
+              </select>
+            </div>
 
-          <!-- Max Events Selector -->
-          <div class="flex items-center bg-white/20 rounded-lg border border-white/30 px-2 py-1 mobile:px-1 mobile:py-0.5">
-            <span class="text-xs mobile:text-xs text-white font-medium mr-2 mobile:mr-1">Max Events:</span>
-            <select
-              v-model.number="maxEvents"
-              @change="setMaxEvents(maxEvents)"
-              class="bg-transparent border-0 text-white text-xs mobile:text-xs font-medium focus:outline-none focus:ring-2 focus:ring-white/50 rounded"
-              :title="`Showing last ${maxEvents} events`"
-            >
-              <option value="100" class="bg-gray-800 text-white">100</option>
-              <option value="500" class="bg-gray-800 text-white">500</option>
-              <option value="1000" class="bg-gray-800 text-white">1K</option>
-              <option value="2000" class="bg-gray-800 text-white">2K</option>
-              <option value="5000" class="bg-gray-800 text-white">5K</option>
-            </select>
+            <!-- TTS Provider Selector -->
+            <div class="flex items-center bg-white/20 rounded-lg border border-white/30 px-2 py-1 mobile:px-1 mobile:py-0.5">
+              <span class="text-xs mobile:text-xs text-white font-medium mr-2 mobile:mr-1">TTS:</span>
+              <select
+                v-model="provider"
+                @change="setProvider(provider)"
+                class="bg-transparent border-0 text-white text-xs mobile:text-xs font-medium focus:outline-none focus:ring-2 focus:ring-white/50 rounded"
+              >
+                <option value="openai" class="bg-gray-800 text-white">OpenAI</option>
+                <option value="elevenlabs" class="bg-gray-800 text-white">ElevenLabs</option>
+                <option value="pyttsx3" class="bg-gray-800 text-white">Pyttsx3</option>
+              </select>
+            </div>
           </div>
 
           <!-- Clear Button -->
