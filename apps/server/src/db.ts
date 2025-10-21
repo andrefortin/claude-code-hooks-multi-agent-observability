@@ -169,7 +169,7 @@ export function getFilterOptions(): FilterOptions {
   };
 }
 
-export function getRecentEvents(limit: number = 100): HookEvent[] {
+export function getRecentEvents(limit: number = 500): HookEvent[] {
   const stmt = db.prepare(`
     SELECT id, source_app, session_id, hook_event_type, payload, chat, summary, timestamp, humanInTheLoop, humanInTheLoopStatus, model_name
     FROM events
@@ -230,16 +230,17 @@ export function updateTheme(id: string, updates: Partial<Theme>): boolean {
   
   if (!setClause) return false;
   
-  const values = Object.keys(updates)
+  const values: (string | number)[] = Object.keys(updates)
     .filter(key => allowedFields.includes(key))
     .map(key => {
+      const value = updates[key as keyof Theme];
       if (key === 'colors' || key === 'tags') {
-        return JSON.stringify(updates[key as keyof Theme]);
+        return JSON.stringify(value);
       }
       if (key === 'isPublic') {
-        return updates[key as keyof Theme] ? 1 : 0;
+        return value ? 1 : 0;
       }
-      return updates[key as keyof Theme];
+      return value as string | number;
     });
   
   const stmt = db.prepare(`UPDATE themes SET ${setClause} WHERE id = ?`);

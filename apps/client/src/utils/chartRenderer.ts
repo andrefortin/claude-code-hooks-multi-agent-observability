@@ -134,28 +134,29 @@ export class ChartRenderer {
     getSessionColor?: (sessionId: string) => string
   ) {
     const chartArea = this.getChartArea();
-    const barCount = this.config.maxDataPoints;
-    const totalBarWidth = chartArea.width / barCount;
-    const barWidth = this.config.barWidth;
+    const { x: chartX, y: chartY, width: chartWidth, height: chartHeight } = chartArea;
+    const { maxDataPoints, barWidth } = this.config;
+    const totalBarWidth = chartWidth / maxDataPoints;
     
     dataPoints.forEach((point, index) => {
-      if (point.count === 0) return;
+      const { count, sessions, eventTypes } = point;
+      if (count === 0) return;
       
-      const x = chartArea.x + (index * totalBarWidth) + (totalBarWidth - barWidth) / 2;
-      const barHeight = (point.count / maxValue) * chartArea.height * progress;
-      const y = chartArea.y + chartArea.height - barHeight;
+      const x = chartX + (index * totalBarWidth) + (totalBarWidth - barWidth) / 2;
+      const barHeight = (count / maxValue) * chartHeight * progress;
+      const y = chartY + chartHeight - barHeight;
       
       // Get the dominant session color for this bar
       let barColor = this.config.colors.primary;
-      if (getSessionColor && point.sessions && Object.keys(point.sessions).length > 0) {
+      if (getSessionColor && sessions && Object.keys(sessions).length > 0) {
         // Get the session with the most events in this time bucket
-        const dominantSession = Object.entries(point.sessions)
+        const dominantSession = Object.entries(sessions)
           .sort((a, b) => b[1] - a[1])[0][0];
         barColor = getSessionColor(dominantSession);
       }
       
       // Draw glow effect with session color
-      this.drawBarGlow(x, y, barWidth, barHeight, point.count / maxValue, barColor);
+      this.drawBarGlow(x, y, barWidth, barHeight, count / maxValue, barColor);
       
       // Draw bar with rounded top
       this.ctx.save();
@@ -179,8 +180,8 @@ export class ChartRenderer {
       this.ctx.restore();
       
       // Draw emoji labels with tooltip background
-      if (formatLabel && point.eventTypes && Object.keys(point.eventTypes).length > 0 && barHeight > 10) {
-        const label = formatLabel(point.eventTypes);
+      if (formatLabel && eventTypes && Object.keys(eventTypes).length > 0 && barHeight > 10) {
+        const label = formatLabel(eventTypes);
         if (label) {
           this.ctx.save();
           this.ctx.font = '20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple Color Emoji", "Segoe UI Emoji", sans-serif';

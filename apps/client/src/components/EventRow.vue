@@ -251,7 +251,7 @@
         </div>
         
         <!-- Chat transcript button -->
-        <div v-if="event.chat && event.chat.length > 0" class="flex justify-end">
+        <div v-if="(event.chat && event.chat.length > 0)" class="flex justify-end">
           <button
             @click.stop="!isMobile && (showChatModal = true)"
             :class="[
@@ -264,7 +264,7 @@
           >
             <span class="text-base mobile:text-sm">💬</span>
             <span class="text-sm mobile:text-xs font-bold drop-shadow-sm">
-              {{ isMobile ? 'Not available in mobile' : `View Chat Transcript (${event.chat.length} messages)` }}
+              {{ isMobile ? 'Not available in mobile' : `View Chat Transcript (${event.chat?.length || 0} messages)` }}
             </span>
           </button>
         </div>
@@ -273,9 +273,9 @@
     </div>
     <!-- Chat Modal -->
     <ChatTranscriptModal
-      v-if="event.chat && event.chat.length > 0"
+      v-if="(event.chat && event.chat.length > 0)"
       :is-open="showChatModal"
-      :chat="event.chat"
+      :chat="event.chat || []"
       @close="showChatModal = false"
     />
   </div>
@@ -357,11 +357,13 @@ const appBgStyle = computed(() => {
 });
 
 const formattedPayload = computed(() => {
-  return JSON.stringify(props.event.payload, null, 2);
+  return JSON.stringify(props.event.payload || {}, null, 2);
 });
 
 const toolInfo = computed(() => {
   const payload = props.event.payload;
+  
+  if (!payload) return null;
   
   // Handle UserPromptSubmit events
   if (props.event.hook_event_type === 'UserPromptSubmit' && payload.prompt) {

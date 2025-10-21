@@ -1,451 +1,269 @@
 import { initDatabase, insertEvent, getFilterOptions, getRecentEvents, updateEventHITLResponse } from './db';
+
 import type { HookEvent, HumanInTheLoopResponse } from './types';
-import { 
-  createTheme, 
-  updateThemeById, 
-  getThemeById, 
-  searchThemes, 
-  deleteThemeById, 
-  exportThemeById, 
+
+import { spawn } from 'bun';
+
+import {
+  createTheme,
+  updateThemeById,
+  getThemeById,
+  searchThemes,
+  deleteThemeById,
+  exportThemeById,
   importTheme,
-  getThemeStats 
+  getThemeStats
 } from './theme';
 
-// Initialize database
-initDatabase();
+// TTS Generation Function
+async function generateTTS(text: string, provider: 'elevenlabs' | 'openai' | 'pyttsx3'): Promise<Uint8Array> {
+  if (!text || !text.trim()) {
+    throw new Error('Text is required for TTS');
+  }
 
-// Store WebSocket clients
-const wsClients = new Set<any>();
+  const basePath = `${process.cwd()}/.claude/hooks/utils/tts/`;
+  const script = provider === 'elevenlabs' ? 'elevenlabs_tts.py' : provider === 'openai' ? 'openai_tts.py' : 'pyttsx3_tts.py';
+  const scriptPath = `${basePath}${script}`;
+  const outputFile = `/tmp/tts_${Date.now()}.${provider === 'pyttsx3' ? 'wav' : 'mp3'}`;
+  const args = [text, '--output', outputFile];
 
-// Helper function to send response to agent via WebSocket
-async function sendResponseToAgent(
-  wsUrl: string,
-  response: HumanInTheLoopResponse
-): Promise<void> {
-  console.log(`[HITL] Connecting to agent WebSocket: ${wsUrl}`);
+  // Check API keys
+  if (provider === 'elevenlabs' && !process.env.ELEVENLABS_API_KEY) {
+    throw new Error('ELEVENLABS_API_KEY is missing in .env');
+  }
+  if (provider === 'openai' && !process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is missing in .env');
+  }
 
-  return new Promise((resolve, reject) => {
-    let ws: WebSocket | null = null;
-    let isResolved = false;
-
-    const cleanup = () => {
-      if (ws) {
-        try {
-          ws.close();
-        } catch (e) {
-          // Ignore close errors
-        }
-      }
-    };
-
-    try {
-      ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        if (isResolved) return;
-        console.log('[HITL] WebSocket connection opened, sending response...');
-
-        try {
-          ws!.send(JSON.stringify(response));
-          console.log('[HITL] Response sent successfully');
-
-          // Wait longer to ensure message fully transmits before closing
-          setTimeout(() => {
-            cleanup();
-            if (!isResolved) {
-              isResolved = true;
-              resolve();
-            }
-          }, 500);
-        } catch (error) {
-          console.error('[HITL] Error sending message:', error);
-          cleanup();
-          if (!isResolved) {
-            isResolved = true;
-            reject(error);
-          }
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('[HITL] WebSocket error:', error);
-        cleanup();
-        if (!isResolved) {
-          isResolved = true;
-          reject(error);
-        }
-      };
-
-      ws.onclose = () => {
-        console.log('[HITL] WebSocket connection closed');
-      };
-
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        if (!isResolved) {
-          console.error('[HITL] Timeout sending response to agent');
-          cleanup();
-          isResolved = true;
-          reject(new Error('Timeout sending response to agent'));
-        }
-      }, 5000);
-
-    } catch (error) {
-      console.error('[HITL] Error creating WebSocket:', error);
-      cleanup();
-      if (!isResolved) {
-        isResolved = true;
-        reject(error);
-      }
-    }
+  const proc = spawn(['uv', 'run', scriptPath, ...args], {
+    cwd: basePath,
+    stdout: 'inherit',
+    stderr: 'pipe',
   });
+
+  const code = await proc.exited;
+  
+  if (code !== 0) {
+    const file = Bun.file(outputFile);
+    if (await file.exists()) await Bun.write(outputFile, '');
+    throw new Error(`TTS script failed with code ${code}`);
+  }
+  
+  const file = Bun.file(outputFile);
+  if (!(await file.exists()) || (await file.size) === 0) {
+    throw new Error('TTS audio file not generated or empty');
+  }
+  
+  const buffer = await file.arrayBuffer();
+  await Bun.write(outputFile, ''); // Clean up
+  return new Uint8Array(buffer);
 }
 
-// Create Bun server with HTTP and WebSocket support
+// Global WebSocket clients tracking
+import type { ServerWebSocket } from 'bun';
+let connectedClients: Set<ServerWebSocket<unknown>> = new Set();
+
+// Broadcast function for new events
+function broadcastEvent(event: HookEvent) {
+  const message = JSON.stringify({ type: 'event', data: event });
+  for (const client of connectedClients) {
+    try {
+      client.send(message);
+    } catch (error) {
+      connectedClients.delete(client);
+    }
+  }
+}
+
+
+// Initialize database
+await initDatabase();
+
+// Theme route handler
+async function handleThemeRoutes(req: Request): Promise<Response> {
+  const { pathname, searchParams } = new URL(req.url);
+  const segments = pathname.split('/').filter(Boolean);
+  const id = segments[2]; // assuming /themes/:id
+
+  try {
+    switch (req.method) {
+      case 'POST':
+        if (pathname === '/themes') {
+          const body = await req.json();
+          return Response.json(await createTheme(body));
+        } else if (pathname === '/themes/import') {
+          const body = await req.json();
+          return Response.json(await importTheme(body));
+        } else if (pathname.startsWith('/themes/') && pathname.endsWith('/export')) {
+          return Response.json(await exportThemeById(id!));
+        }
+        break;
+      case 'PUT':
+        if (pathname.startsWith('/themes/') && id) {
+          const body = await req.json();
+          return Response.json(await updateThemeById(id, body));
+        }
+        break;
+      case 'GET':
+        if (pathname === '/themes') {
+          const q = searchParams.get('q') || '';
+          return Response.json(await searchThemes({ query: q }));
+        } else if (pathname.startsWith('/themes/') && id) {
+          return Response.json(await getThemeById(id));
+        } else if (pathname === '/themes/stats') {
+          return Response.json(await getThemeStats());
+        }
+        break;
+      case 'DELETE':
+        if (pathname.startsWith('/themes/') && id) {
+          await deleteThemeById(id);
+          return new Response(null, { status: 204 });
+        }
+        break;
+    }
+  } catch (error) {
+    return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500 });
+  }
+
+  if (pathname === '/tts' && req.method === 'POST') {
+      try {
+        const body = await req.json() as { text: string; provider: 'elevenlabs' | 'openai' | 'pyttsx3' };
+        const { text, provider } = body;
+        if (!text || !provider) {
+          return new Response(JSON.stringify({ error: 'Missing text or provider' }), { status: 400 });
+        }
+        const audioData = await generateTTS(text, provider);
+        return new Response(audioData, {
+          headers: {
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': audioData.length.toString()
+          }
+        });
+      } catch (error) {
+        console.error('TTS error:', error);
+        return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500 });
+      }
+    }
+
+    return new Response('Not Found', { status: 404 });
+
+}
+
+// Start server
 const server = Bun.serve({
   port: 4000,
-  
-  async fetch(req: Request) {
-    const url = new URL(req.url);
-    
-    // Handle CORS
-    const headers = {
+  async fetch(req: Request): Promise<Response | undefined> {
+    const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     };
-    
-    // Handle preflight
+
     if (req.method === 'OPTIONS') {
-      return new Response(null, { headers });
+      return new Response(null, { status: 200, headers: corsHeaders });
     }
-    
-    // POST /events - Receive new events
+
+    const url = new URL(req.url);
+
+    // WebSocket upgrade for /stream
+    if (url.pathname === '/stream' && req.headers.get('upgrade') === 'websocket') {
+      if (server.upgrade(req, { data: {} })) {
+        return undefined; // Upgraded, no response
+      }
+      return new Response('Upgrade failed', { status: 400 });
+    }
+
+    // HTTP routes
+    if (url.pathname === '/health') {
+      return new Response('OK', { headers: corsHeaders });
+    }
+
+    if (url.pathname === '/events/filter-options' && req.method === 'GET') {
+      return Response.json(getFilterOptions(), { headers: corsHeaders });
+    }
+
+    if (url.pathname === '/events/recent' && req.method === 'GET') {
+      return Response.json(await getRecentEvents(), { headers: corsHeaders });
+    }
+
     if (url.pathname === '/events' && req.method === 'POST') {
       try {
-        const event: HookEvent = await req.json();
-        
-        // Validate required fields
-        if (!event.source_app || !event.session_id || !event.hook_event_type || !event.payload) {
-          return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-            status: 400,
-            headers: { ...headers, 'Content-Type': 'application/json' }
-          });
+        const body = await req.json() as HookEvent;
+        const result = await insertEvent(body);
+        if (result) {
+          broadcastEvent(body);
         }
-        
-        // Insert event into database
-        const savedEvent = insertEvent(event);
-        
-        // Broadcast to all WebSocket clients
-        const message = JSON.stringify({ type: 'event', data: savedEvent });
-        wsClients.forEach(client => {
-          try {
-            client.send(message);
-          } catch (err) {
-            // Client disconnected, remove from set
-            wsClients.delete(client);
-          }
-        });
-        
-        return new Response(JSON.stringify(savedEvent), {
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
+        return Response.json({ id: result }, { headers: corsHeaders });
       } catch (error) {
-        console.error('Error processing event:', error);
-        return new Response(JSON.stringify({ error: 'Invalid request' }), {
-          status: 400,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      }
-    }
-    
-    // GET /events/filter-options - Get available filter options
-    if (url.pathname === '/events/filter-options' && req.method === 'GET') {
-      const options = getFilterOptions();
-      return new Response(JSON.stringify(options), {
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // GET /events/recent - Get recent events
-    if (url.pathname === '/events/recent' && req.method === 'GET') {
-      const limit = parseInt(url.searchParams.get('limit') || '100');
-      const events = getRecentEvents(limit);
-      return new Response(JSON.stringify(events), {
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      });
-    }
-
-    // POST /events/:id/respond - Respond to HITL request
-    if (url.pathname.match(/^\/events\/\d+\/respond$/) && req.method === 'POST') {
-      const id = parseInt(url.pathname.split('/')[2]);
-
-      try {
-        const response: HumanInTheLoopResponse = await req.json();
-        response.respondedAt = Date.now();
-
-        // Update event in database
-        const updatedEvent = updateEventHITLResponse(id, response);
-
-        if (!updatedEvent) {
-          return new Response(JSON.stringify({ error: 'Event not found' }), {
-            status: 404,
-            headers: { ...headers, 'Content-Type': 'application/json' }
-          });
-        }
-
-        // Send response to agent via WebSocket
-        if (updatedEvent.humanInTheLoop?.responseWebSocketUrl) {
-          try {
-            await sendResponseToAgent(
-              updatedEvent.humanInTheLoop.responseWebSocketUrl,
-              response
-            );
-          } catch (error) {
-            console.error('Failed to send response to agent:', error);
-            // Don't fail the request if we can't reach the agent
-          }
-        }
-
-        // Broadcast updated event to all connected clients
-        const message = JSON.stringify({ type: 'event', data: updatedEvent });
-        wsClients.forEach(client => {
-          try {
-            client.send(message);
-          } catch (err) {
-            wsClients.delete(client);
-          }
-        });
-
-        return new Response(JSON.stringify(updatedEvent), {
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      } catch (error) {
-        console.error('Error processing HITL response:', error);
-        return new Response(JSON.stringify({ error: 'Invalid request' }), {
-          status: 400,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
+        return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500 });
       }
     }
 
-    // Theme API endpoints
-    
-    // POST /api/themes - Create a new theme
-    if (url.pathname === '/api/themes' && req.method === 'POST') {
-      try {
-        const themeData = await req.json();
-        const result = await createTheme(themeData);
-        
-        const status = result.success ? 201 : 400;
-        return new Response(JSON.stringify(result), {
-          status,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      } catch (error) {
-        console.error('Error creating theme:', error);
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Invalid request body' 
-        }), {
-          status: 400,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      }
-    }
-    
-    // GET /api/themes - Search themes
-    if (url.pathname === '/api/themes' && req.method === 'GET') {
-      const query = {
-        query: url.searchParams.get('query') || undefined,
-        isPublic: url.searchParams.get('isPublic') ? url.searchParams.get('isPublic') === 'true' : undefined,
-        authorId: url.searchParams.get('authorId') || undefined,
-        sortBy: url.searchParams.get('sortBy') as any || undefined,
-        sortOrder: url.searchParams.get('sortOrder') as any || undefined,
-        limit: url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!) : undefined,
-        offset: url.searchParams.get('offset') ? parseInt(url.searchParams.get('offset')!) : undefined,
-      };
-      
-      const result = await searchThemes(query);
-      return new Response(JSON.stringify(result), {
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // GET /api/themes/:id - Get a specific theme
-    if (url.pathname.startsWith('/api/themes/') && req.method === 'GET') {
-      const id = url.pathname.split('/')[3];
-      if (!id) {
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Theme ID is required' 
-        }), {
-          status: 400,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      }
-      
-      const result = await getThemeById(id);
-      const status = result.success ? 200 : 404;
-      return new Response(JSON.stringify(result), {
-        status,
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // PUT /api/themes/:id - Update a theme
-    if (url.pathname.startsWith('/api/themes/') && req.method === 'PUT') {
-      const id = url.pathname.split('/')[3];
-      if (!id) {
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Theme ID is required' 
-        }), {
-          status: 400,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      }
-      
-      try {
-        const updates = await req.json();
-        const result = await updateThemeById(id, updates);
-        
-        const status = result.success ? 200 : 400;
-        return new Response(JSON.stringify(result), {
-          status,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      } catch (error) {
-        console.error('Error updating theme:', error);
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Invalid request body' 
-        }), {
-          status: 400,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      }
-    }
-    
-    // DELETE /api/themes/:id - Delete a theme
-    if (url.pathname.startsWith('/api/themes/') && req.method === 'DELETE') {
-      const id = url.pathname.split('/')[3];
-      if (!id) {
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Theme ID is required' 
-        }), {
-          status: 400,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      }
-      
-      const authorId = url.searchParams.get('authorId');
-      const result = await deleteThemeById(id, authorId || undefined);
-      
-      const status = result.success ? 200 : (result.error?.includes('not found') ? 404 : 403);
-      return new Response(JSON.stringify(result), {
-        status,
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // GET /api/themes/:id/export - Export a theme
-    if (url.pathname.match(/^\/api\/themes\/[^\/]+\/export$/) && req.method === 'GET') {
-      const id = url.pathname.split('/')[3];
-      
-      const result = await exportThemeById(id);
-      if (!result.success) {
-        const status = result.error?.includes('not found') ? 404 : 400;
-        return new Response(JSON.stringify(result), {
-          status,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      }
-      
-      return new Response(JSON.stringify(result.data), {
-        headers: { 
-          ...headers, 
-          'Content-Type': 'application/json',
-          'Content-Disposition': `attachment; filename="${result.data.theme.name}.json"`
-        }
-      });
-    }
-    
-    // POST /api/themes/import - Import a theme
-    if (url.pathname === '/api/themes/import' && req.method === 'POST') {
-      try {
-        const importData = await req.json();
-        const authorId = url.searchParams.get('authorId');
-        
-        const result = await importTheme(importData, authorId || undefined);
-        
-        const status = result.success ? 201 : 400;
-        return new Response(JSON.stringify(result), {
-          status,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      } catch (error) {
-        console.error('Error importing theme:', error);
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Invalid import data' 
-        }), {
-          status: 400,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        });
-      }
-    }
-    
-    // GET /api/themes/stats - Get theme statistics
-    if (url.pathname === '/api/themes/stats' && req.method === 'GET') {
-      const result = await getThemeStats();
-      return new Response(JSON.stringify(result), {
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // WebSocket upgrade
-    if (url.pathname === '/stream') {
-      const success = server.upgrade(req);
-      if (success) {
-        return undefined;
-      }
-    }
-    
-    // Default response
-    return new Response('Multi-Agent Observability Server', {
-      headers: { ...headers, 'Content-Type': 'text/plain' }
-    });
-  },
-  
-  websocket: {
-    open(ws) {
-      console.log('WebSocket client connected');
-      wsClients.add(ws);
-      
-      // Send recent events on connection
-      const events = getRecentEvents(50);
-      ws.send(JSON.stringify({ type: 'initial', data: events }));
-    },
-    
-    message(ws, message) {
-      // Handle any client messages if needed
-      console.log('Received message:', message);
-    },
-    
-    close(ws) {
-      console.log('WebSocket client disconnected');
-      wsClients.delete(ws);
-    },
-    
-    error(ws, error) {
-      console.error('WebSocket error:', error);
-      wsClients.delete(ws);
-    }
+    if (url.pathname.startsWith('/themes')) {
+      const themeResponse = await handleThemeRoutes(req);
+  if (themeResponse.headers) {
+    themeResponse.headers.set('Access-Control-Allow-Origin', corsHeaders['Access-Control-Allow-Origin']);
+    // Add other CORS headers if needed
   }
+  return themeResponse;
+    }
+
+    if (url.pathname === '/tts' && req.method === 'POST') {
+      try {
+        const body = await req.json() as { text: string; provider: 'elevenlabs' | 'openai' | 'pyttsx3' };
+        const { text, provider } = body;
+        if (!text || !provider) {
+          return new Response(JSON.stringify({ error: 'Missing text or provider' }), { status: 400 });
+        }
+        const audioData = await generateTTS(text, provider);
+        return new Response(audioData, {
+          headers: {
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': audioData.length.toString()
+          }
+        });
+      } catch (error) {
+        console.error('TTS error:', error);
+        return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500 });
+      }
+    }
+
+    return new Response('Not Found', { status: 404 });
+
+  },
+  websocket: {
+    open(ws: ServerWebSocket<unknown>) {
+      connectedClients.add(ws);
+      // Send initial recent events
+      (async () => {
+        try {
+          const events = await getRecentEvents();
+          ws.send(JSON.stringify({ type: 'initial', data: events }));
+        } catch (err) {
+          console.error('Failed to send initial events:', err);
+        }
+      })();
+    },
+    message(ws: ServerWebSocket<unknown>, message: string | Buffer) {
+      if (typeof message !== 'string') return;
+
+      try {
+        const data = JSON.parse(message.toString());
+        if (data.type === 'subscribe') {
+          // Handle subscription, for now just acknowledge
+          ws.send(JSON.stringify({ type: 'subscribed' }));
+          // Optionally send current events again, but already sent on open
+        }
+      } catch (error) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
+      }
+    },
+    close(ws: ServerWebSocket<unknown>, code: number, reason: string) {
+      connectedClients.delete(ws);
+    },
+  },
 });
 
-console.log(`🚀 Server running on http://localhost:${server.port}`);
-console.log(`📊 WebSocket endpoint: ws://localhost:${server.port}/stream`);
-console.log(`📮 POST events to: http://localhost:${server.port}/events`);
+console.log(`Server running on http://localhost:${server.port}`);
+
+// ... rest of file ...

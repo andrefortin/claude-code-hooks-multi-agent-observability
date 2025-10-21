@@ -33,6 +33,20 @@
             {{ events.length }}
           </span>
 
+          <!-- TTS Provider Selector -->
+          <div class="flex items-center bg-white/20 rounded-lg border border-white/30 px-2 py-1 mobile:px-1 mobile:py-0.5">
+            <span class="text-xs mobile:text-xs text-white font-medium mr-2 mobile:mr-1">TTS:</span>
+            <select
+              v-model="provider"
+              @change="setProvider(provider)"
+              class="bg-transparent border-0 text-white text-xs mobile:text-xs font-medium focus:outline-none focus:ring-2 focus:ring-white/50 rounded"
+            >
+              <option value="openai" class="bg-gray-800 text-white">OpenAI</option>
+              <option value="elevenlabs" class="bg-gray-800 text-white">ElevenLabs</option>
+              <option value="pyttsx3" class="bg-gray-800 text-white">Pyttsx3</option>
+            </select>
+          </div>
+
           <!-- Clear Button -->
           <button
             @click="handleClearClick"
@@ -148,6 +162,10 @@ import LivePulseChart from './components/LivePulseChart.vue';
 import ThemeManager from './components/ThemeManager.vue';
 import ToastNotification from './components/ToastNotification.vue';
 import AgentSwimLaneContainer from './components/AgentSwimLaneContainer.vue';
+// TTS Provider for selector
+import { useTTSProvider } from './composables/useTTSProvider';
+
+const { provider, setProvider } = useTTSProvider();
 
 // WebSocket connection
 const { events, isConnected, error, clearEvents } = useWebSocket('ws://localhost:4000/stream');

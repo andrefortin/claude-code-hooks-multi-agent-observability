@@ -10,7 +10,7 @@ export function useWebSocket(url: string) {
   let reconnectTimeout: number | null = null;
   
   // Get max events from environment variable or use default
-  const maxEvents = parseInt(import.meta.env.VITE_MAX_EVENTS_TO_DISPLAY || '100');
+  const maxEvents = parseInt(import.meta.env.VITE_MAX_EVENTS_TO_DISPLAY || '1000');
   
   const connect = () => {
     try {
@@ -29,10 +29,10 @@ export function useWebSocket(url: string) {
           if (message.type === 'initial') {
             const initialEvents = Array.isArray(message.data) ? message.data : [];
             // Only keep the most recent events up to maxEvents
-            events.value = initialEvents.slice(-maxEvents);
+            events.value = (initialEvents.filter(e => e !== null && e !== undefined) || []).slice(-maxEvents);
           } else if (message.type === 'event') {
-            const newEvent = message.data as HookEvent;
-            events.value.push(newEvent);
+            const newEvent = message.data as HookEvent || null;
+            if (newEvent) events.value.push(newEvent);
             
             // Limit events array to maxEvents, removing the oldest when exceeded
             if (events.value.length > maxEvents) {
